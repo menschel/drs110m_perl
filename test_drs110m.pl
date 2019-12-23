@@ -100,17 +100,17 @@ sub decodeVAL {
 sub decodeVal1decimal {
   my ($val) = @_;
   return $val/10;
-}
+};
 
 sub decodeVal10times {
   my ($val) = @_;
   return $val*10;
-}
+};
 
 sub decodeVal1to1 {
   my ($val) = @_;
   return $val;
-}
+};
 
 sub decodeValTime {
 #"19112703192714" => 2019-11-27 19:27:14 
@@ -129,7 +129,7 @@ sub decodeValTemp {
       $hex .= sprintf("%X", ord($_)-0x30);
     };
   return hex($hex);
-  };
+};
 
 sub calc_bcc {
   my ($val) = @_;
@@ -194,10 +194,9 @@ sub generate_request_message{
  
 #main() starts here 
 
-my $cmd;
+#my $cmd;
 my $res;
-my %vals = ();
- 
+#my %vals = (); 
 
 $res = sendgetserial(generate_request_message("serialnumber"=>$serialID));
 #there is an automatic sleep from the serial timeout
@@ -211,43 +210,36 @@ $res = sendgetserial(generate_ack_optionselect_msg("protocol"=>0,"mode"=>1));#no
 $res = sendgetserial(generate_p1_msg("password"=>$password));
 
  
-#read registers, Todo: make this a loop over a HASH for easy usage
+my %drs110m_values = (
+                   #'<measurement>'=>[<address>,<scalingfunction>,'<unit>'],
+                   'Voltage'       =>[ 0,\&decodeVal1decimal,  'V'],
+                   'Current'       =>[ 1,\&decodeVal1decimal,  'A'],
+                   'Frequency'     =>[ 2,\&decodeVal1decimal, 'Hz'],
+                   'Active Power'  =>[ 3, \&decodeVal10times,  'W'],
+                   'Reactive Power'=>[ 4, \&decodeVal10times,'VAr'],
+                   'Apparent Power'=>[ 5, \&decodeVal10times, 'VA'],
+                   'Active Energy' =>[10,    \&decodeVal1to1, 'Wh'],
+                   'Time'          =>[31,    \&decodeValTime,   ''],
+                   'Temperature'   =>[32,    \&decodeValTemp, '°C'],
+                  );
 
-$res = sendgetserial( generate_r1_msg("reg"=>0) );
-$vals { 'Voltage' } = decodeVal1decimal( decodeVAL $res  );
- 
-$res = sendgetserial( generate_r1_msg("reg"=>1) );
-$vals { 'Current' } = decodeVal1decimal( decodeVAL $res  );
- 
-$res = sendgetserial( generate_r1_msg("reg"=>2) );
-$vals { 'Frequency' } = decodeVal1decimal( decodeVAL $res  );
+my $val;
+my $valstr;
+my $unit;
+while ( my ($measurement, $vals) = each(%drs110m_values) ) {
+  $res = sendgetserial( generate_r1_msg("reg"=>$drs110m_values{$measurement}[0]) );
+  if ($measurement eq 'Time'){
+    $val = strftime("%Y-%m-%d %H:%M:%S",&{$drs110m_values{$measurement}[1]}(decodeVAL($res)));
+  }
+  else{
+    $val = &{$drs110m_values{$measurement}[1]}(decodeVAL($res));
+  };
 
-$res = sendgetserial( generate_r1_msg("reg"=>3) );
-$vals { 'Active Power' } = decodeVal10times( decodeVAL $res  );
-
-$res = sendgetserial( generate_r1_msg("reg"=>4) );
-$vals { 'Reactive Power' } = decodeVal10times( decodeVAL $res  );
-
-$res = sendgetserial( generate_r1_msg("reg"=>5) );
-$vals { 'Apparent Power' } = decodeVal10times( decodeVAL $res  );
-
-$res = sendgetserial( generate_r1_msg("reg"=>6) );
-$vals { 'cosphi' } = decodeVal1to1( decodeVAL $res  ) / 1000 ;
-
-$res = sendgetserial( generate_r1_msg("reg"=>10) );
-$vals { 'Active Energy' } = decodeVal1to1( decodeVAL $res  ) * 1 ;
- 
-$res = sendgetserial( generate_r1_msg("reg"=>31) );
-$vals { 'Time' } = strftime("%Y-%m-%d %H:%M:%S",decodeValTime( decodeVAL $res  ));
-
-$res = sendgetserial( generate_r1_msg("reg"=>32) );
-$vals { 'Temperature' } = decodeValTemp( decodeVAL $res  ) ;
-
+  $unit = $drs110m_values{$measurement}[2];
+  $valstr = sprintf("%15s : %s %s\n",$measurement,$val,$unit);
+  print($valstr); 
+};
 
 $res = sendgetserial(generate_b0_msg());
 
-while ( my ($key, $value) = each(%vals) ) {
-  my $str = sprintf("%15s : %s \n",$key,$value);
-  print($str);
-}
 
