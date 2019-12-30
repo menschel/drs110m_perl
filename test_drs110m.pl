@@ -140,6 +140,20 @@ sub calc_bcc {
   return $bcc;
 };
 
+my $SOH = chr(0x01);
+my $STX = chr(0x02);
+my $ETX = chr(0x03);
+my $EOT = chr(0x04);
+
+my $ACK = chr(0x06);
+my $NACK = chr(0x15);
+
+my $CRLF = "\r\n";
+my $STARTCHARACTER = "/";
+my $TRANSMISSIONREQUESTCOMMAND = "?";
+my $ENDCHARACTER = "!";
+
+
 sub generate_r1_msg{
   my %args = @_;
   my $reg = $args{reg};
@@ -168,7 +182,7 @@ sub generate_programming_command_message{
   my $commandtype = $args{commandtype};
   my $data = $args{data};
   my $cmdstr = sprintf("%s%d",$command,$commandtype);
-  my $msg=chr(0x01).$cmdstr.chr(0x02).$data.chr(0x03);
+  my $msg=$SOH.$cmdstr.$STX.$data.$ETX;
   $msg .= chr(calc_bcc($msg));
   return $msg;  
 };
@@ -178,7 +192,7 @@ sub generate_ack_optionselect_msg{
   my $protocol = $args{protocol};
   my $mode = $args{mode};
   my $msgstr = sprintf("%d:%d",$protocol,$mode);#the ':' is the baudrate identifier
-  my $msg=chr(0x06).$msgstr.chr(0x0D).chr(0x0A);#Todo: make the special characters nicely, note there is no bcc for this msg type
+  my $msg=$ACK.$msgstr.$CRLF;#Todo: make the special characters nicely, note there is no bcc for this msg type
   return $msg;
 };
 
@@ -186,7 +200,8 @@ sub generate_ack_optionselect_msg{
 sub generate_request_message{
   my %args = @_;
   my $serialnumber = $args{serialnumber};
-  my $msg = sprintf("/?%012d!\r\n",$serialnumber);
+  my $snstr = sprintf("%012d",$serialnumber);
+  my $msg = $STARTCHARACTER.$TRANSMISSIONREQUESTCOMMAND.$snstr.$ENDCHARACTER.$CRLF;
   return $msg;  
 };
 
