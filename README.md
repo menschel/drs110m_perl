@@ -1,13 +1,13 @@
 # drs110m_perl
 A perl module with an object oriented approach for iec1107 (at least I think it is) compliant communication with a DRS110M din rail power meter similar to my [pyehz](https://github.com/menschel/pyehz) project.
 This is considered a pre-step for integration in FHEM OBIS Module.
-Use and Copy as you wish. Maybe this module will mature enough to be uploaded to CPAN.
-
-# What works and what not
-The module iec1107 can be used with a pre-defined serial port, a device serial number and a device password.
-The basic functions have been tested. Some special functions 
+Maybe this module will mature enough to be uploaded to CPAN.
 
 # Usage example:
+Define a serial port with setting 9600@7E1.
+Define a new iec1107 device with the port reference.
+Since there are usually multiple devices on RS-485 a single device can't set up the port.
+
 ```
 use iec1107;#include the module
 
