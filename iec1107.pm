@@ -12,7 +12,7 @@ package iec1107; # we name our package iec1107 as this is the original protocol 
 
 use strict;
 use warnings;
-use Carp; #TODO: this is for the "ref" check
+use Carp;
 
 use Device::SerialPort;
 
@@ -34,38 +34,7 @@ our $STARTCHARACTER = "/";
 our $TRANSMISSIONREQUESTCOMMAND = "?";
 our $ENDCHARACTER = "!";
 
-#function prototypes
-
-#serial transfer function
-#sub _xfer($);
-
-#read 1 message data interpretation
-#sub _interpret_r1_msg($);
-
-#scaling functions
-#sub _scale_div_by_10($);
-#sub _scale_mul_by_10($);
-#sub _scale_1_to_1($);
-#sub _scale_to_time($);
-#sub _scale_to_temp($);
-
-#calculate message checksum
-#sub _calc_bcc($);
-
-
-#message generation functions
-#sub _generate_r1_msg(%);
-#sub _generate_p1_msg(%);
-#sub _generate_b0_msg();
-#sub _generate_programming_command_message(%);
-#sub _generate_ack_optionselect_msg(%);
-#sub _generate_request_message(%);
-
-
-
-
-
-my %drs110m_values = (
+our %drs110m_values = (
                    #'<measurement>'=>[<address>,<scalingfunction>,'<unit>'],
                    'Voltage'       =>[ 0,\&_scale_div_by_10,  'V'],
                    'Current'       =>[ 1,\&_scale_div_by_10,  'A'],
@@ -81,13 +50,13 @@ my %drs110m_values = (
 
 sub new(\$$$){
   #we expect a HASH consisting of a reference to a valid port, an ID and a password
-  # {"port"=>\$port,
-  #  "serialID"=>$id,
+  # {"port"=>$port, #perl automatically converts this to a reference
+  #  "id"=>$id,
   #  "passwd"=>$passwd,
   #}
   my $class = shift;
-  my $self = {@_};#creates reference to HASH
-  bless($self,$class);#changes class of $object to "drs110m"
+  my $self = {@_};
+  bless($self,$class);
   $self->_init;
   return $self;
 };
@@ -95,34 +64,37 @@ sub new(\$$$){
 sub _init {
   my $self = shift;
   #we expect $self->port to be setup correctly so nothing to do here
-
+  $self->{"regs"} = ();
   #for whatever reason _init() does not return anything in the LEARN PERL Examples
   return;
 };
 
 sub start_communication {
   my $self = shift;
+  unless (ref $self){croak "call with an object, not a class";}
   my $res;
-  $res = $self->_xfer(_generate_request_message("serialnumber"=>$self->{serialID}));
+  $res = $self->_xfer(_generate_request_message("serialnumber"=>$self->id));
   #there is an automatic sleep from the serial timeout
   if (!$res){
     #a second wakeup call is not required every time but when the device was asleep.
-    $res = $self->_xfer(_generate_request_message("serialnumber"=>$self->{serialID}));
+    $res = $self->_xfer(_generate_request_message("serialnumber"=>$self->id));
   };
   return $self; #utility functions should return self according to LEARN PERL examples
 };
 
 sub start_programming_mode {
   my $self = shift;
+  unless (ref $self){croak "call with an object, not a class";}
   my $res;
   $res = $self->_xfer(_generate_ack_optionselect_msg("protocol"=>0,"mode"=>1));#note: mode 1 is programming mode, obviously privileges are needed for register access
-  $res = $self->_xfer(_generate_p1_msg("password"=>$self->{passwd}));
+  $res = $self->_xfer(_generate_p1_msg("password"=>$self->passwd));
   return $self; #utility functions should return self according to LEARN PERL examples  
 };
 
 
 sub update_values {
   my $self = shift;
+  unless (ref $self){croak "call with an object, not a class";}
   my $res;
   my $valstr;
   my $unit;
@@ -134,8 +106,9 @@ sub update_values {
       if ($addr == $drs110m_values{$measurement}[0]){#paranoia check
         $val = &{$drs110m_values{$measurement}[1]}($val);
         $unit = $drs110m_values{$measurement}[2];
-        $valstr = sprintf("%15s : %s %s\n",$measurement,$val,$unit);
-        print($valstr);
+        $valstr = sprintf("%s %s",$val,$unit);
+        #print($valstr);
+        $self->{regs}{$measurement}=$valstr;
       }
       else{
         die("Found $addr but expected $drs110m_values{$measurement}[0]");
@@ -152,6 +125,7 @@ sub update_values {
 sub log_off() {
   my $self = shift;
   my $res;
+  unless (ref $self){croak "call with an object, not a class";}
   $res = $self->_xfer(_generate_b0_msg());
   return $self;
 };
@@ -161,33 +135,25 @@ sub _xfer {
   my ($cmd) = @_;
   my $count;
   my $res;
-  $self->{port}->lookclear;
-  $self->{port}->write( $cmd );
+  $self->port->lookclear;
+  $self->port->write( $cmd );
  
-  ($count,$res)=$self->{port}->read(32);
+  ($count,$res)=$self->port->read(32);
 
   return $res;
 }
 
 
-#TODO: we have to include this obj class check with "ref" later
-#sub do_something() {
-#  my $self = shift;
-#   unless (ref $self){"croak Should call surname() with an object, not a class";}
-#  return $self->{surname}
-#}
-
-#TODO: we need object accessor methodes later
 # Object accessor methods
-# interesting function that writes if there is an input, apparently 
-#sub address { $_[0]->{address }=$_[1] if defined $_[1]; $_[0]->{address } }
+sub port { $_[0]->{port}=$_[1] if defined $_[1]; $_[0]->{port} }
+sub id { $_[0]->{id}=$_[1] if defined $_[1]; $_[0]->{id} }
+sub passwd { $_[0]->{passwd}=$_[1] if defined $_[1]; $_[0]->{passwd} }
+sub regs { $_[0]->{regs}=$_[1] if defined $_[1]; $_[0]->{regs} }
 
 
 
 
-
-#basic functions
-
+#basic non-object functions
 
 sub _interpret_r1_msg($){
   my ($str) = @_;
@@ -288,7 +254,7 @@ sub _generate_ack_optionselect_msg(%){
   my $protocol = $args{protocol};
   my $mode = $args{mode};
   my $msgstr = sprintf("%d:%d",$protocol,$mode);#the ':' is the baudrate identifier
-  my $msg=$ACK.$msgstr.$CRLF;#Todo: make the special characters nicely, note there is no bcc for this msg type
+  my $msg=$ACK.$msgstr.$CRLF;
   return $msg;
 };
 
