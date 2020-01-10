@@ -1,14 +1,12 @@
 #!/usr/bin/perl
 # 
-# This is actually my first attempt with perl. 
-# This script borrows parts of https://wiki.volkszaehler.org/hardware/channels/meters/power/eastron_drs155m
-# which itself borrows parts of http://www.ip-symcon.de/forum/threads/21407-Stromz%C3%A4hler-mit-RS485/page2
-# The general functions have been developed in python3, see https://github.com/menschel/pyehz
-# Use and copy as you wish.
+# perl module for accessing a IEC1107 device
+# This is my first my perl module and these resources were a good kickstart
+# https://learn.perl.org/books/beginning-perl/
+# https://wiki.volkszaehler.org/hardware/channels/meters/power/eastron_drs155m
 # Menschel (C) 2020
 
 package iec1107; # we name our package iec1107 as this is the original protocol name
-
 
 use strict;
 use warnings;
@@ -46,10 +44,10 @@ our %drs110m_values = (
                    'Time'          =>[31,    \&_scale_to_time,   ''],
                    'Temperature'   =>[32,    \&_scale_to_temp, '°C'],
                   );
-
+#actually there are more registers, but who cares about cosphi for example?!
 
 sub new(\$$$){
-  #we expect a HASH consisting of a reference to a valid port, an ID and a password
+  #we expect a HASH consisting of a reference to a valid and correctly set up port, an ID and a password
   # {"port"=>$port, #perl automatically converts this to a reference
   #  "id"=>$id,
   #  "passwd"=>$passwd,
@@ -63,9 +61,7 @@ sub new(\$$$){
 
 sub _init {
   my $self = shift;
-  #we expect $self->port to be setup correctly so nothing to do here
   $self->{"regs"} = ();
-  #for whatever reason _init() does not return anything in the LEARN PERL Examples
   return;
 };
 
@@ -74,21 +70,22 @@ sub start_communication {
   unless (ref $self){croak "call with an object, not a class";}
   my $res;
   $res = $self->_xfer(_generate_request_message("serialnumber"=>$self->id));
-  #there is an automatic sleep from the serial timeout
+  #Note: There is an automatic sleep from the serial timeout, so we don't sleep here
   if (!$res){
-    #a second wakeup call is not required every time but when the device was asleep.
+    #a second wakeup call is not required every time, only when the device was asleep.
     $res = $self->_xfer(_generate_request_message("serialnumber"=>$self->id));
   };
-  return $self; #utility functions should return self according to LEARN PERL examples
+  return $self;
 };
 
 sub start_programming_mode {
   my $self = shift;
   unless (ref $self){croak "call with an object, not a class";}
   my $res;
-  $res = $self->_xfer(_generate_ack_optionselect_msg("protocol"=>0,"mode"=>1));#note: mode 1 is programming mode, obviously privileges are needed for register access
+  $res = $self->_xfer(_generate_ack_optionselect_msg("protocol"=>0,"mode"=>1));
+  #note: mode 1 is programming mode, obviously privileges are needed for register access
   $res = $self->_xfer(_generate_p1_msg("password"=>$self->passwd));
-  return $self; #utility functions should return self according to LEARN PERL examples  
+  return $self; 
 };
 
 
@@ -102,12 +99,11 @@ sub update_values {
   while ( my ($measurement, $vals) = each(%drs110m_values) ) {
     $res = $self->_xfer(_generate_r1_msg("reg"=>$drs110m_values{$measurement}[0]));
     ($addr,$val) = _interpret_r1_msg($res);
-    if (defined($addr)){#sanity check
-      if ($addr == $drs110m_values{$measurement}[0]){#paranoia check
+    if (defined($addr)){
+      if ($addr == $drs110m_values{$measurement}[0]){
         $val = &{$drs110m_values{$measurement}[1]}($val);
         $unit = $drs110m_values{$measurement}[2];
         $valstr = sprintf("%s %s",$val,$unit);
-        #print($valstr);
         $self->{regs}{$measurement}=$valstr;
       }
       else{
@@ -137,9 +133,7 @@ sub _xfer {
   my $res;
   $self->port->lookclear;
   $self->port->write( $cmd );
- 
   ($count,$res)=$self->port->read(32);
-
   return $res;
 }
 
@@ -154,7 +148,6 @@ sub regs { $_[0]->{regs}=$_[1] if defined $_[1]; $_[0]->{regs} }
 
 
 #basic non-object functions
-
 sub _interpret_r1_msg($){
   my ($str) = @_;
   my $val;
@@ -185,9 +178,7 @@ sub _scale_1_to_1($){
 };
 
 sub _scale_to_time($){
-#"19112703192714" => 2019-11-27 19:27:14 
   my ($str) = @_;
-  #print("$str \n");
   my $fmt = "%y%m%d0%w%H%M%S";
   my @time = (POSIX::strptime($str,$fmt))[0..7];
   if (wantarray){
@@ -268,4 +259,4 @@ sub _generate_request_message(%){
 };
 
 
-1;#for whatever reason
+1;
